@@ -23,7 +23,7 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 GROUP_ID = os.environ.get("GROUP_ID")
 CHANNEL_URL = os.environ.get("CHANNEL_URL")
 DEV_URL = os.environ.get("DEV_URL")
-CHAT_URL = "https://t.me/+GUrrAxu90tk2NWY1"
+CHAT_URL = os.environ.get("CHAT_URL")
 
 # -------------------- TELEGRAM --------------------
 
@@ -36,10 +36,10 @@ def send_to_telegram(text):
         "inline_keyboard": [
             [
                 {"text": "☎️ Numbers", "url": CHANNEL_URL},
-                {"text": "🖥️ Developer", "url": DEV_URL}
+                {"text": "👑 Owner", "url": CHAT_URL}
             ],
             [
-                {"text": "🤝 Support Chat", "url": CHAT_URL},
+                {"text": "🖥️ Developer", "url": DEV_URL},
                 
             
             ]
@@ -142,7 +142,7 @@ def on_message(ws, message):
     f"<code>{html.escape(raw_msg)}</code>\n"
     "━━━━━━━━━━━━━━━━━━━━\n"
     "\n"
-    "<i>⚡ Delivered instantly via DDxOTP </i>"
+    "<i>⚡ Delivered instantly via @hiden_25 </i>"
 )
 
 
