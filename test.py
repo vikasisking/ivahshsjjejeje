@@ -7,6 +7,7 @@ from datetime import datetime
 import html
 import os
 from flask import Flask, Response
+from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 import asyncio
 
