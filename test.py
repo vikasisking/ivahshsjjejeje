@@ -7,31 +7,44 @@ from datetime import datetime
 import html
 import os
 from flask import Flask, Response
+from telegram.ext import Application, CommandHandler, ContextTypes
+import asyncio
 
 # -------------------- CONFIG --------------------
 
-PING_INTERVAL = 150
-start_pinging = False
-
-import os
-
 WS_URL = os.environ.get("WS_URL")
 AUTH_MESSAGE = os.environ.get("AUTH_MESSAGE")
-PING_INTERVAL = int(os.environ.get("PING_INTERVAL", 25))  # default 25 sec
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-GROUP_ID = os.environ.get("GROUP_ID")
+ADMIN_ID = int(os.environ.get("ADMIN_ID", "7761576669"))  # apna telegram ID
 CHANNEL_URL = os.environ.get("CHANNEL_URL")
 DEV_URL = os.environ.get("DEV_URL")
 CHAT_URL = os.environ.get("CHAT_URL")
 
+PING_INTERVAL = int(os.environ.get("PING_INTERVAL", 25))
+
+# -------------------- STATE --------------------
+CHAT_IDS = set()  # multiple groups
+otp_count = 0
+last_otp_time = "N/A"
+connected = False
+start_pinging = False
+
+# -------------------- UTILITIES --------------------
+
+def country_to_flag(code: str) -> str:
+    if not code or len(code) != 2:
+        return ""
+    return "".join(chr(127397 + ord(c)) for c in code.upper())
+
+def mask_number(number: str) -> str:
+    if len(number) < 9:
+        return number
+    return number[:5] + '⁕' * (len(number) - 9) + number[-4:]
+
 # -------------------- TELEGRAM --------------------
 
-
 def send_to_telegram(text):
-    retries = 3
-    delay = 1
-
     buttons = {
         "inline_keyboard": [
             [
@@ -39,21 +52,19 @@ def send_to_telegram(text):
                 {"text": "👑 Owner", "url": CHAT_URL}
             ],
             [
-                {"text": "🖥️ Developer", "url": DEV_URL},
-                
-            
+                {"text": "🖥️ Developer", "url": DEV_URL}
             ]
         ]
     }
 
     payload = {
-        "chat_id": GROUP_ID,
-        "text": text,
         "parse_mode": "HTML",
+        "text": text,
         "reply_markup": json.dumps(buttons)
     }
 
-    for attempt in range(retries):
+    for chat_id in CHAT_IDS:
+        payload["chat_id"] = chat_id
         try:
             response = requests.post(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
@@ -61,19 +72,13 @@ def send_to_telegram(text):
                 timeout=10
             )
             if response.status_code == 200:
-                print("✅ Message sent to Telegram")
-                return True
+                print(f"✅ Message sent to {chat_id}")
             else:
                 print(f"⚠️ Telegram Error [{response.status_code}]: {response.text}")
         except Exception as e:
-            print(f"❌ Telegram Send Failed (Attempt {attempt+1}/{retries}):", e)
-        
-        if attempt < retries - 1:
-            time.sleep(delay)
-    return False
+            print("❌ Telegram Send Failed:", e)
 
-
-# -------------------- FUNCTIONS --------------------
+# -------------------- WEBSOCKET --------------------
 
 def send_ping(ws):
     global start_pinging
@@ -88,7 +93,8 @@ def send_ping(ws):
         time.sleep(PING_INTERVAL)
 
 def on_open(ws):
-    global start_pinging
+    global start_pinging, connected
+    connected = True
     start_pinging = False
     print("✅ WebSocket connected")
 
@@ -103,7 +109,7 @@ def on_open(ws):
     threading.Thread(target=send_ping, args=(ws,), daemon=True).start()
 
 def on_message(ws, message):
-    global start_pinging
+    global start_pinging, otp_count, last_otp_time
     if message == "3":
         print("✅ Pong received")
     elif message.startswith("40/livesms"):
@@ -125,30 +131,23 @@ def on_message(ws, message):
                 otp_match = re.search(r'\b\d{3}[- ]?\d{3}\b|\b\d{6}\b', raw_msg)
                 otp = otp_match.group(0) if otp_match else "N/A"
 
-                masked = recipient[:5] + '⁕' * (len(recipient) - 9) + recipient[-4:]
+                masked = mask_number(recipient)
                 now = datetime.now().strftime("%H:%M:%S")
-                service = "WhatsApp" if "whatsapp" in raw_msg.lower() else "Unknown"
+                flag = country_to_flag(country)
 
                 telegram_msg = (
-    "🔔 <b><u>OTP Alert</u></b>\n"
-    "━━━━━━━━━━━━━━━━━━━━\n"
-    f"🌍 <b>Country:</b> <code>{country}</code>\n"
-    f"🔑 <b>OTP:</b> <code>{otp}</code>\n"
-    f"🕒 <b>Time:</b> <code>{now}</code>\n"
-    f"📢 <b>Service:</b> <code>{originator}</code>\n"
-    f"📱 <b>Number:</b> <code>{masked}</code>\n"
-    "━━━━━━━━━━━━━━━━━━━━\n"
-    f"💬 <b>Message:</b>\n"
-    f"<code>{html.escape(raw_msg)}</code>\n"
-    "━━━━━━━━━━━━━━━━━━━━\n"
-    "\n"
-    "<i>⚡ Delivered instantly via @hiden_25 </i>"
-)
-
-
+                    f"<blockquote>🌍 Country: {flag} <code>{country}</code></blockquote>\n"
+                    f"<blockquote>🔑 OTP: <code>{otp}</code></blockquote>\n"
+                    f"<blockquote>🕒 Time: <code>{now}</code></blockquote>\n"
+                    f"<blockquote>📢 Service: <code>{originator}</code></blockquote>\n"
+                    f"<blockquote>📱 Number: <code>{masked}</code></blockquote>\n"
+                    f"<blockquote>💬 Message:\n<code>{html.escape(raw_msg)}</code></blockquote>\n"
+                    "\n⚡ Delivered instantly via @hiden_25"
+                )
 
                 send_to_telegram(telegram_msg)
-
+                otp_count += 1
+                last_otp_time = now
             else:
                 print("⚠️ Unexpected data format:", data)
 
@@ -160,14 +159,15 @@ def on_error(ws, error):
     print("❌ WebSocket error:", error)
 
 def on_close(ws, code, msg):
-    global start_pinging
+    global start_pinging, connected
+    connected = False
     start_pinging = False
     print("🔌 WebSocket closed. Reconnecting in 1s...")
     time.sleep(1)
-    start_ws_thread()  # Reconnect automatically
+    start_ws_thread()
 
 def connect():
-    print("🔄 Connecting to IVASMS WebSocket...")
+    print("🔄 Connecting to WebSocket...")
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Origin": "https://ivasms.com",
@@ -190,7 +190,54 @@ def start_ws_thread():
     t = threading.Thread(target=connect, daemon=True)
     t.start()
 
-# -------------------- FLASK WEB SERVICE --------------------
+# -------------------- TELEGRAM COMMANDS --------------------
+
+async def status(update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return await update.message.reply_text("❌ Unauthorized")
+
+    msg = (
+        f"📊 <b>Bot Status</b>\n\n"
+        f"🔌 Connected: <code>{connected}</code>\n"
+        f"✅ Total OTPs: <code>{otp_count}</code>\n"
+        f"⏱️ Last OTP Time: <code>{last_otp_time}</code>\n"
+        f"📌 Forwarding Groups: {', '.join(CHAT_IDS) if CHAT_IDS else 'None'}"
+    )
+    await update.message.reply_text(msg, parse_mode="HTML")
+
+async def addgroup(update, context):
+    if update.effective_user.id != ADMIN_ID:
+        return await update.message.reply_text("❌ Unauthorized")
+
+    if not context.args:
+        return await update.message.reply_text("Usage: /addgroup <chat_id>")
+
+    chat_id = context.args[0]
+    CHAT_IDS.add(chat_id)
+    await update.message.reply_text(f"✅ Group {chat_id} added")
+
+async def removegroup(update, context):
+    if update.effective_user.id != ADMIN_ID:
+        return await update.message.reply_text("❌ Unauthorized")
+
+    if not context.args:
+        return await update.message.reply_text("Usage: /removegroup <chat_id>")
+
+    chat_id = context.args[0]
+    if chat_id in CHAT_IDS:
+        CHAT_IDS.remove(chat_id)
+        await update.message.reply_text(f"✅ Group {chat_id} removed")
+    else:
+        await update.message.reply_text("⚠️ Group not found")
+
+def start_telegram_listener():
+    tg_app = Application.builder().token(BOT_TOKEN).build()
+    tg_app.add_handler(CommandHandler("status", status))
+    tg_app.add_handler(CommandHandler("addgroup", addgroup))
+    tg_app.add_handler(CommandHandler("removegroup", removegroup))
+    tg_app.run_polling()
+
+# -------------------- FLASK --------------------
 
 app = Flask(__name__)
 
@@ -205,6 +252,7 @@ def health():
 # -------------------- START --------------------
 
 if __name__ == "__main__":
-    start_ws_thread()  # Start the WebSocket in background
-    port = int(os.environ.get("PORT", 8080))  # Use PORT env variable if provided
-    app.run(host="0.0.0.0", port=port, threaded=True)
+    start_ws_thread()
+    flask_thread = threading.Thread(target=lambda: app.run(host="0.0.0.0", port=8080), daemon=True)
+    flask_thread.start()
+    start_telegram_listener()
