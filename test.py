@@ -107,6 +107,30 @@ def on_open(ws):
     print("🔐 Sent auth token")
 
     threading.Thread(target=send_ping, args=(ws,), daemon=True).start()
+# Dummy Test OTP Message
+def build_test_message():
+    return (
+        "<blockquote>🌍 Country: 🇮🇳 IN</blockquote>\n"
+        "<blockquote>🔑 OTP: 123456</blockquote>\n"
+        "<blockquote>📢 Service: TestService</blockquote>\n"
+        "<blockquote>💬 Message:\nThis is a test message</blockquote>\n\n"
+        "⚡ Powered by @hiden_25"
+    )
+
+async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not CHAT_IDS:
+        await update.message.reply_text("⚠️ No groups added yet. Use /addgroup <id> to add one.")
+        return
+
+    test_msg = build_test_message()
+    for gid in CHAT_IDS:
+        try:
+            await context.bot.send_message(chat_id=gid, text=test_msg, parse_mode="HTML")
+        except Exception as e:
+            await update.message.reply_text(f"❌ Failed to send test message to {gid}: {e}")
+            continue
+
+    await update.message.reply_text("✅ Test message sent to all groups.")
 
 def on_message(ws, message):
     global start_pinging, otp_count, last_otp_time
@@ -235,6 +259,7 @@ def start_telegram_listener():
     tg_app.add_handler(CommandHandler("status", status))
     tg_app.add_handler(CommandHandler("addgroup", addgroup))
     tg_app.add_handler(CommandHandler("removegroup", removegroup))
+    tg_app.add_handler(CommandHandler("test", test_command))  # ✅ yahan change
     tg_app.run_polling()
 
 # -------------------- FLASK --------------------
