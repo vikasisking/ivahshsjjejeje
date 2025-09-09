@@ -355,7 +355,7 @@ async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "👋 Welcome to <b>OTP Bot</b>\n\n"
-        "⚡ This bot is live,,,
+        "⚡ This bot is live,,,"
     )
 
     keyboard = [
