@@ -1,3 +1,4 @@
 flask
 websocket-client
 requests
+python-telegram-bot
