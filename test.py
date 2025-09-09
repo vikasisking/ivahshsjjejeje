@@ -133,6 +133,53 @@ async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("✅ Test message sent to all groups.")
 
+def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    doc = update.message.document
+    if doc and doc.file_name.endswith(".txt"):
+        file = doc.get_file()
+        file_path = f"downloads/{doc.file_name}"
+        file.download(file_path)
+        context.chat_data["last_file"] = file_path
+        update.message.reply_text("✅ File saved. Now reply `/setnumber <userid>` to assign.")
+
+def setnumber(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if "last_file" not in context.chat_data:
+        update.message.reply_text("⚠️ First upload a numbers.txt file and then use this command.")
+        return
+    
+    if len(context.args) != 1:
+        update.message.reply_text("⚠️ Usage: /setnumber <userid>")
+        return
+
+    user_id = context.args[0]
+    file_path = context.chat_data["last_file"]
+
+    with open(file_path, "r") as f:
+        numbers = [line.strip() for line in f if line.strip()]
+
+    mapping = load_mapping()
+    for number in numbers:
+        mapping[number] = user_id
+    save_mapping(mapping)
+
+    update.message.reply_text(f"✅ Numbers assigned to user {user_id}")
+
+mapping = load_mapping()
+if recipient in mapping:
+    target_user = mapping[recipient]
+    send_private_otp(target_user, telegram_msg)
+else:
+    send_to_telegram(telegram_msg)
+
+def send_private_otp(user_id, text):
+    payload = {
+        "chat_id": user_id,
+        "text": text,
+        "parse_mode": "HTML"
+    }
+    requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data=payload)
+
+
 def on_message(ws, message):
     global start_pinging, otp_count, last_otp_time
     if message == "3":
