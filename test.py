@@ -7,7 +7,7 @@ from datetime import datetime
 import html
 import os
 from flask import Flask, Response
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -352,6 +352,22 @@ async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         send_message_to_chat(gid, test_msg)
     await update.message.reply_text("✅ Test message sent to all groups.")
 
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "👋 Welcome to <b>OTP Bot</b>\n\n"
+        "⚡ This bot is live,,,
+    )
+
+    keyboard = [
+        [
+            InlineKeyboardButton("📢 Join Channel", url=CHANNEL_URL),
+            InlineKeyboardButton("👨‍💻 Contact Dev", url=DEV_URL)
+        ]
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="HTML")
+
 # document (file) handler (admin uploads numbers.txt)
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
@@ -392,14 +408,43 @@ async def setnumber(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_mapping(NUMBER_TO_USER)
     await update.message.reply_text(f"✅ Assigned {added} numbers to user {target_user}.")
 
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return await update.message.reply_text("❌ Unauthorized")
+
+    if not context.args:
+        return await update.message.reply_text("⚠️ Usage: /broadcast <message>")
+
+    msg = " ".join(context.args)
+
+    # Groups me bhejna
+    for gid in CHAT_IDS:
+        try:
+            await context.bot.send_message(chat_id=gid, text=f"📢 <b>Broadcast:</b>\n{msg}", parse_mode="HTML")
+        except Exception as e:
+            print(f"❌ Failed to send broadcast to group {gid}: {e}")
+
+    # Mapped users me bhejna
+    mapping = load_mapping()
+    sent_users = set(mapping.values())
+    for uid in sent_users:
+        try:
+            await context.bot.send_message(chat_id=uid, text=f"📢 <b>Broadcast:</b>\n{msg}", parse_mode="HTML")
+        except Exception as e:
+            print(f"❌ Failed to send broadcast to user {uid}: {e}")
+
+    await update.message.reply_text("✅ Broadcast sent successfully.")
+
 # -------------------- TELEGRAM SETUP/START --------------------
 def start_telegram_listener():
     app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("addgroup", addgroup))
     app.add_handler(CommandHandler("removegroup", removegroup))
     app.add_handler(CommandHandler("test", test_command))
     app.add_handler(CommandHandler("setnumber", setnumber))
+    app.add_handler(CommandHandler("broadcast", broadcast))
     # document handler: admin uploads numbers.txt
     app.add_handler(MessageHandler(filters.Document.ALL, handle_file))
     # run_polling blocks — we start WS + Flask in separate threads before calling this
