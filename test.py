@@ -26,9 +26,9 @@ WS_URL = os.environ.get("WS_URL")
 AUTH_MESSAGE = os.environ.get("AUTH_MESSAGE", "")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "7761576669"))  # set your numeric Telegram ID
-CHANNEL_URL = os.environ.get("CHANNEL_URL", "https://t.me/yourchannel")
+CHANNEL_URL = os.environ.get("CHANNEL_URL", "https://t.me/TEAM56RJ")
 DEV_URL = os.environ.get("DEV_URL", "https://t.me/yourdev")
-CHAT_URL = os.environ.get("CHAT_URL", "https://t.me/owner")
+CHAT_URL = os.environ.get("CHAT_URL", "https://t.me/RISHIHEARTMAKER")
 PING_INTERVAL = int(os.environ.get("PING_INTERVAL", 25))
 PORT = int(os.environ.get("PORT", "8080"))
 
